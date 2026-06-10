@@ -57,11 +57,39 @@ const getUserById = (id) => {
   return getUsers().find(u => u._id === id);
 };
 
+const updateUser = (id, updateFields) => {
+  const data = readData();
+  const index = data.users.findIndex(u => u._id === id);
+  if (index === -1) return null;
+
+  data.users[index] = {
+    ...data.users[index],
+    ...updateFields,
+    updatedAt: new Date().toISOString()
+  };
+  writeData(data);
+  return data.users[index];
+};
+
+const deleteUser = (id) => {
+  const data = readData();
+  const index = data.users.findIndex(u => u._id === id);
+  if (index === -1) return null;
+
+  const [deletedUser] = data.users.splice(index, 1);
+  writeData(data);
+  return deletedUser;
+};
+
 // Websites queries & updates
 const getWebsites = () => readData().websites;
 
 const getWebsiteById = (id) => {
   return getWebsites().find(w => w._id === id);
+};
+
+const getWebsitesByUserId = (userId) => {
+  return getWebsites().filter(w => w.userId && w.userId.toString() === userId.toString());
 };
 
 const saveWebsite = (website) => {
@@ -92,13 +120,36 @@ const updateWebsite = (id, updateFields) => {
   return data.websites[index];
 };
 
+const deleteWebsite = (id) => {
+  const data = readData();
+  const index = data.websites.findIndex(w => w._id === id);
+  if (index === -1) return null;
+
+  const [deletedWebsite] = data.websites.splice(index, 1);
+  writeData(data);
+  return deletedWebsite;
+};
+
+const deleteWebsitesByUserId = (userId) => {
+  const data = readData();
+  const deletedWebsites = data.websites.filter(w => w.userId && w.userId.toString() === userId.toString());
+  data.websites = data.websites.filter(w => !w.userId || w.userId.toString() !== userId.toString());
+  writeData(data);
+  return deletedWebsites;
+};
+
 module.exports = {
   getUsers,
   saveUser,
   getUserByEmail,
   getUserById,
+  updateUser,
+  deleteUser,
   getWebsites,
   getWebsiteById,
+  getWebsitesByUserId,
   saveWebsite,
-  updateWebsite
+  updateWebsite,
+  deleteWebsite,
+  deleteWebsitesByUserId
 };

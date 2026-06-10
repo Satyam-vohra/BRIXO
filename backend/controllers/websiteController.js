@@ -99,7 +99,7 @@ const findWebsiteById = async (id) => {
   return storage.getWebsiteById(id);
 };
 
-const createWebsite = async (websiteData) => {
+const createWebsiteRecord = async (websiteData) => {
   if (getIsConnected()) {
     return Website.create(websiteData);
   }
@@ -116,6 +116,20 @@ const applyWebsiteUpdate = async (id, updateFields) => {
   return storage.updateWebsite(id, updateFields);
 };
 
+const removeWebsiteById = async (id) => {
+  if (getIsConnected()) {
+    return Website.findByIdAndDelete(id);
+  }
+  return storage.deleteWebsite(id);
+};
+
+const findWebsitesByUserId = async (userId) => {
+  if (getIsConnected()) {
+    return Website.find({ userId }).sort({ updatedAt: -1 });
+  }
+  return storage.getWebsitesByUserId(userId);
+};
+
 const isOwner = (website, userId) => {
   const plainWebsite = toPlainWebsite(website);
   if (!plainWebsite.userId) return true;
@@ -130,7 +144,7 @@ const saveOrUpdateWebsite = async (body, userId) => {
 
   if (!body.id) {
     const websiteData = getWebsitePayload(body, userId);
-    const website = await createWebsite(websiteData);
+    const website = await createWebsiteRecord(websiteData);
     return { status: 201, website, created: true };
   }
 
@@ -174,6 +188,33 @@ const saveWebsite = async (req, res) => {
   }
 };
 
+const createWebsite = async (req, res) => {
+  try {
+    const { id, ...bodyWithoutId } = req.body;
+    const result = await saveOrUpdateWebsite(bodyWithoutId, getUserId(req));
+
+    if (result.error) {
+      return res.status(result.status).json({
+        success: false,
+        message: result.error
+      });
+    }
+
+    return res.status(201).json({
+      success: true,
+      message: "Website created",
+      data: buildWebsiteResponse(result.website)
+    });
+  } catch (error) {
+    console.error("Create website error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error during website creation",
+      error: error.message
+    });
+  }
+};
+
 const getWebsite = async (req, res) => {
   const { id } = req.params;
 
@@ -202,7 +243,9 @@ const getWebsite = async (req, res) => {
 };
 
 const updateWebsite = async (req, res) => {
-  if (!req.body.id) {
+  const id = req.params.id || req.body.id;
+
+  if (!id) {
     return res.status(400).json({
       success: false,
       message: "Please specify the website ID ('id')"
@@ -210,7 +253,7 @@ const updateWebsite = async (req, res) => {
   }
 
   try {
-    const result = await saveOrUpdateWebsite(req.body, getUserId(req));
+    const result = await saveOrUpdateWebsite({ ...req.body, id }, getUserId(req));
 
     if (result.error) {
       return res.status(result.status).json({
@@ -229,6 +272,72 @@ const updateWebsite = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Server error during website update",
+      error: error.message
+    });
+  }
+};
+
+const deleteWebsite = async (req, res) => {
+  const { id } = req.params;
+  const userId = getUserId(req);
+
+  try {
+    const website = await findWebsiteById(id);
+
+    if (!website) {
+      return res.status(404).json({
+        success: false,
+        message: "Website not found"
+      });
+    }
+
+    if (!isOwner(website, userId)) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized to delete this website"
+      });
+    }
+
+    await removeWebsiteById(id);
+
+    return res.json({
+      success: true,
+      message: "Website deleted"
+    });
+  } catch (error) {
+    console.error("Delete website error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error during website deletion",
+      error: error.message
+    });
+  }
+};
+
+const getUserWebsites = async (req, res) => {
+  const { userId } = req.params;
+  const requestingUserId = getUserId(req);
+
+  if (normalizeId(userId) !== normalizeId(requestingUserId)) {
+    return res.status(403).json({
+      success: false,
+      message: "Not authorized to view these websites"
+    });
+  }
+
+  try {
+    const websites = await findWebsitesByUserId(userId);
+
+    return res.json({
+      success: true,
+      count: websites.length,
+      data: websites.map(buildWebsiteResponse)
+    });
+  } catch (error) {
+    console.error("Get user websites error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error during user websites fetching",
       error: error.message
     });
   }
@@ -255,7 +364,7 @@ const publishWebsite = async (req, res) => {
 
   try {
     let website;
-    let websiteId = req.body.id;
+    let websiteId = req.params.id || req.body.id;
 
     if (websiteId) {
       const validationError = validateWebsiteBody(req.body);
@@ -321,10 +430,56 @@ const publishWebsite = async (req, res) => {
 
 const saveAndPublishWebsite = publishWebsite;
 
+const unpublishWebsite = async (req, res) => {
+  const { id } = req.params;
+  const userId = getUserId(req);
+
+  try {
+    const website = await findWebsiteById(id);
+
+    if (!website) {
+      return res.status(404).json({
+        success: false,
+        message: "Website not found"
+      });
+    }
+
+    if (!isOwner(website, userId)) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized to unpublish this website"
+      });
+    }
+
+    const updatedWebsite = await applyWebsiteUpdate(id, {
+      isPublished: false,
+      publishedHtml: "",
+      publishedUrl: ""
+    });
+
+    return res.json({
+      success: true,
+      message: "Website unpublished",
+      data: buildWebsiteResponse(updatedWebsite)
+    });
+  } catch (error) {
+    console.error("Unpublish website error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error during website unpublishing",
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
+  createWebsite,
   saveWebsite,
   getWebsite,
   updateWebsite,
+  deleteWebsite,
+  getUserWebsites,
   publishWebsite,
-  saveAndPublishWebsite
+  saveAndPublishWebsite,
+  unpublishWebsite
 };

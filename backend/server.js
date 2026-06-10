@@ -70,6 +70,10 @@ app.get("/published/:id", async (req, res) => {
   }
 });
 
+app.get("/", (req, res) => {
+  res.send("Backend is running!");
+});
+
 const PORT = process.env.PORT || 5000;
 
 // Start Server
