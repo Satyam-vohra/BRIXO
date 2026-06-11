@@ -1,19 +1,446 @@
-import React, { useContext, useState, useEffect } from 'react';
+import React, { useContext, useState, useEffect, useRef } from 'react';
 import { BuilderContext } from '../../context/BuilderContext';
 import { useAIColorSuggestion } from '../../hooks/useAIColorSuggestion';
-import TabBar from '../ui/TabBar';
 import ColorSwatch from '../ui/ColorSwatch';
-import { Sparkles, AlertCircle, Loader2 } from 'lucide-react';
+import {
+  Sparkles,
+  AlertCircle,
+  Loader2,
+  Pencil,
+  Palette,
+  Bot,
+  ChevronDown,
+  ChevronRight,
+  RotateCcw,
+  Check,
+} from 'lucide-react';
 
-const TABS = [
-  { id: 'edit', label: 'Edit Block' },
-  { id: 'design', label: 'Design' },
-  { id: 'ai', label: 'AI' }
+// ─── Constants ────────────────────────────────────────────────
+const BUSINESS_TYPES = [
+  { value: 'Food', emoji: '🍔' },
+  { value: 'Fashion', emoji: '👗' },
+  { value: 'Tech', emoji: '💻' },
+  { value: 'Health', emoji: '💊' },
+  { value: 'Education', emoji: '📚' },
+  { value: 'Finance', emoji: '💰' },
 ];
 
-const BUSINESS_TYPES = ['Food', 'Fashion', 'Tech', 'Health', 'Education', 'Finance'];
-const FONT_STYLES = ['Modern', 'Classic', 'Elegant', 'Friendly'];
+const FONT_STYLES = [
+  { id: 'Modern', sample: 'Grotesk', hint: 'Clean & minimal' },
+  { id: 'Classic', sample: 'Serif', hint: 'Traditional feel' },
+  { id: 'Elegant', sample: 'Editorial', hint: 'Luxury & editorial' },
+  { id: 'Friendly', sample: 'Rounded', hint: 'Warm & approachable' },
+];
 
+const TABS = [
+  { id: 'edit', icon: Pencil, label: 'Edit' },
+  { id: 'design', icon: Palette, label: 'Design' },
+  { id: 'ai', icon: Bot, label: 'AI' },
+];
+
+// ─── Reusable field components ────────────────────────────────
+function FieldInput({ label, value, onChange, placeholder }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+      <label style={s.label}>{label}</label>
+      <input
+        type="text"
+        value={value || ''}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        style={s.input}
+        onFocus={(e) => (e.target.style.borderColor = '#6c63ff')}
+        onBlur={(e) => (e.target.style.borderColor = 'rgba(0,0,0,0.12)')}
+      />
+    </div>
+  );
+}
+
+function FieldTextarea({ label, value, onChange, rows = 3, placeholder }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+      <label style={s.label}>{label}</label>
+      <textarea
+        value={value || ''}
+        onChange={(e) => onChange(e.target.value)}
+        rows={rows}
+        placeholder={placeholder}
+        style={{ ...s.input, resize: 'none', lineHeight: 1.6 }}
+        onFocus={(e) => (e.target.style.borderColor = '#6c63ff')}
+        onBlur={(e) => (e.target.style.borderColor = 'rgba(0,0,0,0.12)')}
+      />
+    </div>
+  );
+}
+
+function SectionHeader({ title, color = '#6c63ff' }) {
+  return (
+    <p style={{
+      fontSize: 10, fontWeight: 700, letterSpacing: 1.2,
+      textTransform: 'uppercase', color, margin: '0 0 10px',
+    }}>
+      {title}
+    </p>
+  );
+}
+
+// ─── Collapsible feature group ────────────────────────────────
+function FeatureGroup({ label, index, content, onChange }) {
+  const [open, setOpen] = useState(index === 0);
+  const titleKey = `feature${index}Title`;
+  const descKey = `feature${index}Desc`;
+
+  return (
+    <div style={{
+      border: '1px solid rgba(0,0,0,0.08)', borderRadius: 10, overflow: 'hidden',
+    }}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center',
+          justifyContent: 'space-between', padding: '9px 12px',
+          background: open ? '#f5f3ff' : '#fafafa',
+          border: 'none', cursor: 'pointer',
+          fontSize: 12, fontWeight: 600,
+          color: open ? '#6c63ff' : '#475569',
+          transition: 'background 0.15s',
+        }}
+      >
+        <span>Feature {index}</span>
+        {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+      </button>
+      {open && (
+        <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 10, background: '#fff' }}>
+          <FieldInput
+            label="Title"
+            value={content[titleKey]}
+            onChange={(v) => onChange(titleKey, v)}
+          />
+          <FieldTextarea
+            label="Description"
+            value={content[descKey]}
+            onChange={(v) => onChange(descKey, v)}
+            rows={2}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Edit Tab ─────────────────────────────────────────────────
+function EditTab({ selectedBlock, updateBlockContent }) {
+  if (!selectedBlock) {
+    return (
+      <div style={{ ...s.emptyState }}>
+        <div style={s.emptyIcon}>✏️</div>
+        <p style={s.emptyTitle}>No block selected</p>
+        <p style={s.emptyDesc}>Click any block on the canvas to edit its content here.</p>
+      </div>
+    );
+  }
+
+  const { type, content, id } = selectedBlock;
+  const set = (field, val) => updateBlockContent(id, field, val);
+
+  const blockEditors = {
+    navbar: () => (
+      <>
+        <SectionHeader title="Navbar" />
+        <FieldInput label="Logo Text" value={content.logoText} onChange={(v) => set('logoText', v)} />
+        <FieldInput label="CTA Button Text" value={content.ctaButtonText} onChange={(v) => set('ctaButtonText', v)} />
+      </>
+    ),
+    hero: () => (
+      <>
+        <SectionHeader title="Hero Section" />
+        <FieldTextarea label="Headline" value={content.headline} onChange={(v) => set('headline', v)} rows={2} />
+        <FieldTextarea label="Subheadline" value={content.subheadline} onChange={(v) => set('subheadline', v)} rows={3} />
+        <FieldInput label="Primary Button" value={content.button1Text} onChange={(v) => set('button1Text', v)} />
+        <FieldInput label="Secondary Button" value={content.button2Text} onChange={(v) => set('button2Text', v)} />
+      </>
+    ),
+    cta: () => (
+      <>
+        <SectionHeader title="CTA Banner" />
+        <FieldTextarea label="Headline" value={content.headline} onChange={(v) => set('headline', v)} rows={2} />
+        <FieldInput label="Button Text" value={content.buttonText} onChange={(v) => set('buttonText', v)} />
+      </>
+    ),
+    features: () => (
+      <>
+        <SectionHeader title="Features" />
+        {[1, 2, 3].map((i) => (
+          <FeatureGroup
+            key={i}
+            index={i}
+            content={content}
+            onChange={set}
+          />
+        ))}
+      </>
+    ),
+    footer: () => (
+      <>
+        <SectionHeader title="Footer" />
+        <FieldInput label="Company Name" value={content.companyName} onChange={(v) => set('companyName', v)} />
+        <FieldInput label="Copyright Text" value={content.copyrightText} onChange={(v) => set('copyrightText', v)} />
+      </>
+    ),
+  };
+
+  const Editor = blockEditors[type];
+  if (!Editor) {
+    return (
+      <div style={s.emptyState}>
+        <div style={s.emptyIcon}>🧩</div>
+        <p style={s.emptyTitle}>No editable fields</p>
+        <p style={s.emptyDesc}>This block type ("{type}") doesn't have text fields to edit.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {/* Block type badge */}
+      <div style={{
+        display: 'inline-flex', alignItems: 'center', gap: 6,
+        background: '#f5f3ff', borderRadius: 6, padding: '4px 10px',
+        alignSelf: 'flex-start',
+      }}>
+        <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#6c63ff' }} />
+        <span style={{ fontSize: 11, fontWeight: 700, color: '#6c63ff', letterSpacing: 0.3 }}>
+          {type.charAt(0).toUpperCase() + type.slice(1)} Block
+        </span>
+      </div>
+
+      <Editor />
+    </div>
+  );
+}
+
+// ─── Design Tab ───────────────────────────────────────────────
+function DesignTab({ businessType, setBusinessType, fontStyle, setFontStyle, onAISuggest }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+      {/* Business Type */}
+      <div>
+        <SectionHeader title="Business Type" />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+          {BUSINESS_TYPES.map(({ value, emoji }) => {
+            const active = businessType === value;
+            return (
+              <button
+                key={value}
+                onClick={() => setBusinessType(value)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 7,
+                  padding: '8px 10px',
+                  borderRadius: 9,
+                  border: active ? '1.5px solid #6c63ff' : '1px solid rgba(0,0,0,0.1)',
+                  background: active ? '#f5f3ff' : '#fafafa',
+                  color: active ? '#6c63ff' : '#475569',
+                  fontSize: 12,
+                  fontWeight: active ? 700 : 500,
+                  cursor: 'pointer',
+                  transition: 'all 0.12s',
+                  textAlign: 'left',
+                }}
+              >
+                <span style={{ fontSize: 15 }}>{emoji}</span>
+                {value}
+                {active && <Check size={11} style={{ marginLeft: 'auto' }} />}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Font Style */}
+      <div>
+        <SectionHeader title="Typography" />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {FONT_STYLES.map(({ id, sample, hint }) => {
+            const active = fontStyle === id;
+            return (
+              <button
+                key={id}
+                onClick={() => setFontStyle(id)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '10px 12px',
+                  borderRadius: 9,
+                  border: active ? '1.5px solid #6c63ff' : '1px solid rgba(0,0,0,0.1)',
+                  background: active ? '#f5f3ff' : '#fafafa',
+                  cursor: 'pointer',
+                  transition: 'all 0.12s',
+                }}
+              >
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: active ? '#6c63ff' : '#1e293b' }}>
+                    {id}
+                  </span>
+                  <span style={{ fontSize: 10, color: '#94a3b8' }}>{hint}</span>
+                </div>
+                <span style={{
+                  fontSize: 11, fontFamily: id === 'Classic' || id === 'Elegant' ? 'Georgia, serif' : 'sans-serif',
+                  color: active ? '#6c63ff' : '#94a3b8', fontWeight: 600,
+                }}>
+                  Aa {sample}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* AI Suggest button */}
+      <button
+        onClick={onAISuggest}
+        style={{
+          width: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 8,
+          padding: '13px 16px',
+          background: 'linear-gradient(135deg, #6c63ff, #4f46e5)',
+          color: '#fff',
+          border: 'none',
+          borderRadius: 12,
+          fontSize: 13,
+          fontWeight: 700,
+          cursor: 'pointer',
+          letterSpacing: -0.2,
+          transition: 'opacity 0.15s, transform 0.1s',
+          marginTop: 4,
+        }}
+        onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.9')}
+        onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
+        onMouseDown={(e) => (e.currentTarget.style.transform = 'scale(0.98)')}
+        onMouseUp={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+      >
+        <Sparkles size={15} />
+        AI Suggest Colors
+      </button>
+    </div>
+  );
+}
+
+// ─── AI Tab ───────────────────────────────────────────────────
+function AITab({ loading, error, colorPalette, businessType, onRetry }) {
+  if (loading) {
+    return (
+      <div style={{ ...s.emptyState, gap: 14 }}>
+        <Loader2 size={36} color="#6c63ff" style={{ animation: 'spin 1s linear infinite' }} />
+        <p style={s.emptyTitle}>AI is thinking…</p>
+        <p style={s.emptyDesc}>
+          Curating the perfect palette for {businessType} websites…
+        </p>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={{ ...s.emptyState, gap: 10 }}>
+        <AlertCircle size={32} color="#ef4444" />
+        <p style={{ ...s.emptyTitle, color: '#ef4444' }}>Suggestion failed</p>
+        <p style={{ ...s.emptyDesc, color: '#f87171' }}>{error}</p>
+        <button
+          onClick={onRetry}
+          style={{
+            marginTop: 8, display: 'flex', alignItems: 'center', gap: 6,
+            padding: '8px 16px', borderRadius: 8,
+            border: '1px solid rgba(0,0,0,0.1)',
+            background: '#fff', cursor: 'pointer',
+            fontSize: 12, fontWeight: 600, color: '#475569',
+          }}
+        >
+          <RotateCcw size={13} /> Try again
+        </button>
+      </div>
+    );
+  }
+
+  const swatches = [
+    { key: 'primary', label: 'Primary' },
+    { key: 'secondary', label: 'Secondary' },
+    { key: 'accent', label: 'Accent' },
+    { key: 'background', label: 'Background' },
+    { key: 'text', label: 'Text' },
+  ];
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{
+          width: 28, height: 28, borderRadius: 7,
+          background: 'linear-gradient(135deg, #6c63ff, #4f46e5)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <Sparkles size={13} color="#fff" />
+        </div>
+        <div>
+          <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#1e293b' }}>
+            {businessType} Palette
+          </p>
+          <p style={{ margin: 0, fontSize: 10, color: '#94a3b8' }}>AI-generated color scheme</p>
+        </div>
+      </div>
+
+      {/* Color swatches */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {swatches.map(({ key, label }) => (
+          colorPalette[key] && (
+            <ColorSwatch key={key} color={colorPalette[key]} label={label} />
+          )
+        ))}
+      </div>
+
+      {/* Reasoning */}
+      {colorPalette.reasoning && (
+        <div style={{
+          background: '#f8fafc', border: '1px solid rgba(0,0,0,0.07)',
+          borderRadius: 10, padding: '12px 14px',
+        }}>
+          <p style={{ margin: '0 0 6px', fontSize: 10, fontWeight: 700, color: '#94a3b8', letterSpacing: 1, textTransform: 'uppercase' }}>
+            AI Reasoning
+          </p>
+          <p style={{ margin: 0, fontSize: 12, color: '#475569', lineHeight: 1.7 }}>
+            {colorPalette.reasoning}
+          </p>
+        </div>
+      )}
+
+      {/* Regenerate */}
+      <button
+        onClick={onRetry}
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+          padding: '10px', borderRadius: 9,
+          border: '1px solid rgba(108,99,255,0.25)',
+          background: '#f5f3ff', color: '#6c63ff',
+          fontSize: 12, fontWeight: 600, cursor: 'pointer',
+          transition: 'opacity 0.15s',
+        }}
+        onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.75')}
+        onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
+      >
+        <RotateCcw size={13} /> Regenerate Palette
+      </button>
+    </div>
+  );
+}
+
+// ─── RightPanel (main export) ─────────────────────────────────
 export default function RightPanel() {
   const {
     canvasBlocks,
@@ -21,413 +448,140 @@ export default function RightPanel() {
     businessType,
     fontStyle,
     colorPalette,
-    addBlock,
-    selectBlock,
     updateBlockContent,
     setColorPalette,
     setBusinessType,
-    setFontStyle
+    setFontStyle,
   } = useContext(BuilderContext);
 
   const [activeTab, setActiveTab] = useState('design');
   const { suggestColors, loading, error } = useAIColorSuggestion();
 
-  // Find the currently selected block object
   const selectedBlock = canvasBlocks.find((b) => b.id === selectedBlockId);
 
-  // Switch automatically to the 'Edit' tab when a block is selected
   useEffect(() => {
-    if (selectedBlockId) {
-      setActiveTab('edit');
-    }
+    if (selectedBlockId) setActiveTab('edit');
   }, [selectedBlockId]);
 
   const handleAISuggest = async () => {
-    // Switch to AI tab to show output or loading feedback
     setActiveTab('ai');
     const result = await suggestColors(businessType);
-    if (result) {
-      setColorPalette(result);
-    }
-  };
-
-  const renderEditTab = () => {
-    if (!selectedBlock) {
-      return (
-        <div className="flex flex-col items-center justify-center py-20 px-4 text-center select-none text-brand-muted">
-          <span className="text-3xl mb-3">✏️</span>
-          <p className="text-sm font-semibold">
-            Select a block on the canvas to edit its content
-          </p>
-        </div>
-      );
-    }
-
-    const { type, content, id } = selectedBlock;
-
-    const handleInputChange = (field, val) => {
-      updateBlockContent(id, field, val);
-    };
-
-    switch (type) {
-      case 'navbar':
-        return (
-          <div className="flex flex-col gap-4">
-            <h3 className="text-xs font-bold text-brand-dark/50 uppercase tracking-wider mb-2">Navbar Editor</h3>
-            <div>
-              <label className="block text-xs font-bold text-brand-dark mb-1">Logo Text</label>
-              <input
-                type="text"
-                value={content.logoText || ''}
-                onChange={(e) => handleInputChange('logoText', e.target.value)}
-                className="w-full px-3 py-2 border border-brand-border rounded-xl text-sm focus:outline-none focus:border-brand-primary"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-brand-dark mb-1">CTA Button Text</label>
-              <input
-                type="text"
-                value={content.ctaButtonText || ''}
-                onChange={(e) => handleInputChange('ctaButtonText', e.target.value)}
-                className="w-full px-3 py-2 border border-brand-border rounded-xl text-sm focus:outline-none focus:border-brand-primary"
-              />
-            </div>
-          </div>
-        );
-      case 'hero':
-        return (
-          <div className="flex flex-col gap-4">
-            <h3 className="text-xs font-bold text-brand-dark/50 uppercase tracking-wider mb-2">Hero Editor</h3>
-            <div>
-              <label className="block text-xs font-bold text-brand-dark mb-1">Headline</label>
-              <textarea
-                value={content.headline || ''}
-                onChange={(e) => handleInputChange('headline', e.target.value)}
-                rows={3}
-                className="w-full px-3 py-2 border border-brand-border rounded-xl text-sm focus:outline-none focus:border-brand-primary resize-none"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-brand-dark mb-1">Subheadline</label>
-              <textarea
-                value={content.subheadline || ''}
-                onChange={(e) => handleInputChange('subheadline', e.target.value)}
-                rows={4}
-                className="w-full px-3 py-2 border border-brand-border rounded-xl text-sm focus:outline-none focus:border-brand-primary resize-none"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-brand-dark mb-1">Primary Button</label>
-              <input
-                type="text"
-                value={content.button1Text || ''}
-                onChange={(e) => handleInputChange('button1Text', e.target.value)}
-                className="w-full px-3 py-2 border border-brand-border rounded-xl text-sm focus:outline-none focus:border-brand-primary"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-brand-dark mb-1">Secondary Button</label>
-              <input
-                type="text"
-                value={content.button2Text || ''}
-                onChange={(e) => handleInputChange('button2Text', e.target.value)}
-                className="w-full px-3 py-2 border border-brand-border rounded-xl text-sm focus:outline-none focus:border-brand-primary"
-              />
-            </div>
-          </div>
-        );
-      case 'cta':
-        return (
-          <div className="flex flex-col gap-4">
-            <h3 className="text-xs font-bold text-brand-dark/50 uppercase tracking-wider mb-2">CTA Editor</h3>
-            <div>
-              <label className="block text-xs font-bold text-brand-dark mb-1">Headline</label>
-              <textarea
-                value={content.headline || ''}
-                onChange={(e) => handleInputChange('headline', e.target.value)}
-                rows={3}
-                className="w-full px-3 py-2 border border-brand-border rounded-xl text-sm focus:outline-none focus:border-brand-primary resize-none"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-brand-dark mb-1">Button Text</label>
-              <input
-                type="text"
-                value={content.buttonText || ''}
-                onChange={(e) => handleInputChange('buttonText', e.target.value)}
-                className="w-full px-3 py-2 border border-brand-border rounded-xl text-sm focus:outline-none focus:border-brand-primary"
-              />
-            </div>
-          </div>
-        );
-      case 'features':
-        return (
-          <div className="flex flex-col gap-4 overflow-y-auto max-h-[calc(100vh-200px)] pr-1">
-            <h3 className="text-xs font-bold text-brand-dark/50 uppercase tracking-wider">Features Editor</h3>
-            
-            {/* Feature 1 */}
-            <div className="border-b border-brand-border pb-3 flex flex-col gap-2">
-              <span className="text-[10px] uppercase font-bold text-brand-primary">Feature 1</span>
-              <div>
-                <label className="block text-xs font-bold text-brand-dark mb-1">Title</label>
-                <input
-                  type="text"
-                  value={content.feature1Title || ''}
-                  onChange={(e) => handleInputChange('feature1Title', e.target.value)}
-                  className="w-full px-3 py-2 border border-brand-border rounded-xl text-sm focus:outline-none focus:border-brand-primary"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-brand-dark mb-1">Description</label>
-                <textarea
-                  value={content.feature1Desc || ''}
-                  onChange={(e) => handleInputChange('feature1Desc', e.target.value)}
-                  rows={2}
-                  className="w-full px-3 py-2 border border-brand-border rounded-xl text-sm focus:outline-none focus:border-brand-primary resize-none"
-                />
-              </div>
-            </div>
-
-            {/* Feature 2 */}
-            <div className="border-b border-brand-border pb-3 flex flex-col gap-2">
-              <span className="text-[10px] uppercase font-bold text-brand-primary">Feature 2</span>
-              <div>
-                <label className="block text-xs font-bold text-brand-dark mb-1">Title</label>
-                <input
-                  type="text"
-                  value={content.feature2Title || ''}
-                  onChange={(e) => handleInputChange('feature2Title', e.target.value)}
-                  className="w-full px-3 py-2 border border-brand-border rounded-xl text-sm focus:outline-none focus:border-brand-primary"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-brand-dark mb-1">Description</label>
-                <textarea
-                  value={content.feature2Desc || ''}
-                  onChange={(e) => handleInputChange('feature2Desc', e.target.value)}
-                  rows={2}
-                  className="w-full px-3 py-2 border border-brand-border rounded-xl text-sm focus:outline-none focus:border-brand-primary resize-none"
-                />
-              </div>
-            </div>
-
-            {/* Feature 3 */}
-            <div className="flex flex-col gap-2">
-              <span className="text-[10px] uppercase font-bold text-brand-primary">Feature 3</span>
-              <div>
-                <label className="block text-xs font-bold text-brand-dark mb-1">Title</label>
-                <input
-                  type="text"
-                  value={content.feature3Title || ''}
-                  onChange={(e) => handleInputChange('feature3Title', e.target.value)}
-                  className="w-full px-3 py-2 border border-brand-border rounded-xl text-sm focus:outline-none focus:border-brand-primary"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-brand-dark mb-1">Description</label>
-                <textarea
-                  value={content.feature3Desc || ''}
-                  onChange={(e) => handleInputChange('feature3Desc', e.target.value)}
-                  rows={2}
-                  className="w-full px-3 py-2 border border-brand-border rounded-xl text-sm focus:outline-none focus:border-brand-primary resize-none"
-                />
-              </div>
-            </div>
-          </div>
-        );
-      case 'footer':
-        return (
-          <div className="flex flex-col gap-4">
-            <h3 className="text-xs font-bold text-brand-dark/50 uppercase tracking-wider mb-2">Footer Editor</h3>
-            <div>
-              <label className="block text-xs font-bold text-brand-dark mb-1">Company Name</label>
-              <input
-                type="text"
-                value={content.companyName || ''}
-                onChange={(e) => handleInputChange('companyName', e.target.value)}
-                className="w-full px-3 py-2 border border-brand-border rounded-xl text-sm focus:outline-none focus:border-brand-primary"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-brand-dark mb-1">Copyright Text</label>
-              <input
-                type="text"
-                value={content.copyrightText || ''}
-                onChange={(e) => handleInputChange('copyrightText', e.target.value)}
-                className="w-full px-3 py-2 border border-brand-border rounded-xl text-sm focus:outline-none focus:border-brand-primary"
-              />
-            </div>
-          </div>
-        );
-      default:
-        return (
-          <div className="flex flex-col items-center justify-center py-20 px-4 text-center select-none text-brand-muted">
-            <span className="text-3xl mb-3">🧩</span>
-            <p className="text-sm font-semibold">
-              Select a block to edit its content
-            </p>
-            <p className="text-xs mt-1">
-              This block type ("{type}") does not expose text fields for editing.
-            </p>
-          </div>
-        );
-    }
-  };
-
-  const renderDesignTab = () => {
-    return (
-      <div className="flex flex-col gap-6">
-        {/* Business Type dropdown */}
-        <div>
-          <label className="block text-xs font-bold text-brand-dark mb-1.5 uppercase tracking-wider">
-            Business Type
-          </label>
-          <select
-            value={businessType}
-            onChange={(e) => setBusinessType(e.target.value)}
-            className="w-full px-3 py-3 bg-white border border-brand-border rounded-2xl text-sm font-medium focus:outline-none focus:border-brand-primary hover:border-slate-350 transition-colors"
-          >
-            {BUSINESS_TYPES.map((type) => (
-              <option key={type} value={type}>
-                {type}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Font Style Radios */}
-        <div>
-          <label className="block text-xs font-bold text-brand-dark mb-2 uppercase tracking-wider">
-            Typography Style
-          </label>
-          <div className="grid grid-cols-2 gap-2">
-            {FONT_STYLES.map((style) => (
-              <label
-                key={style}
-                className={`flex flex-col p-3 border rounded-2xl cursor-pointer hover:bg-slate-50 transition active:scale-95 select-none ${
-                  fontStyle === style
-                    ? 'border-brand-primary bg-indigo-50/20 text-brand-primary font-bold'
-                    : 'border-brand-border bg-white text-slate-600'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold">{style}</span>
-                  <input
-                    type="radio"
-                    name="fontStyle"
-                    value={style}
-                    checked={fontStyle === style}
-                    onChange={() => setFontStyle(style)}
-                    className="sr-only"
-                  />
-                  <div
-                    className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${
-                      fontStyle === style ? 'border-brand-primary text-brand-primary' : 'border-slate-300'
-                    }`}
-                  >
-                    {fontStyle === style && <div className="w-1.5 h-1.5 rounded-full bg-brand-primary" />}
-                  </div>
-                </div>
-                <span className="text-[10px] text-brand-muted mt-1 font-mono">
-                  {style === 'Classic' && 'Aa Serif'}
-                  {style === 'Elegant' && 'Aa Editorial'}
-                  {style === 'Friendly' && 'Aa Rounded'}
-                  {style === 'Modern' && 'Aa Grotesk'}
-                </span>
-              </label>
-            ))}
-          </div>
-        </div>
-
-        {/* AI Suggest Colors Button */}
-        <div className="border-t border-brand-border pt-6 mt-4">
-          <button
-            onClick={handleAISuggest}
-            className="w-full flex items-center justify-center gap-2 py-4 px-4 bg-brand-dark text-white font-bold rounded-2xl hover:bg-slate-800 transition shadow-md active:scale-[0.98]"
-          >
-            <Sparkles className="w-4 h-4 text-brand-primary fill-brand-primary" />
-            AI Suggest Colors
-          </button>
-        </div>
-      </div>
-    );
-  };
-
-  const renderAITab = () => {
-    if (loading) {
-      return (
-        <div className="flex flex-col items-center justify-center py-24 text-center">
-          <Loader2 className="w-10 h-10 text-brand-primary animate-spin mb-4" />
-          <h3 className="text-sm font-bold text-brand-dark">AI is thinking...</h3>
-          <p className="text-xs text-brand-muted mt-1 max-w-[200px] leading-relaxed">
-            Curating the perfect palette for {businessType} websites...
-          </p>
-        </div>
-      );
-    }
-
-    if (error) {
-      return (
-        <div className="flex flex-col items-center justify-center py-16 text-center px-4">
-          <AlertCircle className="w-10 h-10 text-red-500 mb-3" />
-          <h3 className="text-sm font-bold text-brand-dark">Suggestion failed</h3>
-          <p className="text-xs text-red-500 mt-1 max-w-[220px] leading-relaxed">
-            {error}
-          </p>
-          <button
-            onClick={handleAISuggest}
-            className="mt-5 px-4 py-2 border border-slate-350 text-xs font-bold text-brand-dark rounded-xl hover:bg-slate-50 transition active:scale-95"
-          >
-            Try again
-          </button>
-        </div>
-      );
-    }
-
-    // Default view: Show swatches and reasoning
-    return (
-      <div className="flex flex-col gap-5">
-        <div className="flex items-center gap-2 border-b border-brand-border pb-3">
-          <Sparkles className="w-4 h-4 text-brand-primary fill-brand-primary" />
-          <h3 className="text-xs font-bold text-brand-dark uppercase tracking-wider">
-            {businessType} Color Palette
-          </h3>
-        </div>
-
-        <div className="grid grid-cols-1 gap-2">
-          <ColorSwatch color={colorPalette.primary} label="Primary Color" />
-          <ColorSwatch color={colorPalette.secondary} label="Secondary Color" />
-          <ColorSwatch color={colorPalette.accent} label="Accent Color" />
-          <ColorSwatch color={colorPalette.background} label="Background Color" />
-          <ColorSwatch color={colorPalette.text} label="Text Color" />
-        </div>
-
-        {colorPalette.reasoning && (
-          <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl mt-1">
-            <h4 className="text-[10px] text-brand-muted uppercase font-bold tracking-wider mb-1.5">
-              AI Design Reasoning
-            </h4>
-            <p className="text-xs text-slate-600 leading-relaxed font-medium">
-              {colorPalette.reasoning}
-            </p>
-          </div>
-        )}
-      </div>
-    );
+    if (result) setColorPalette(result);
   };
 
   return (
-    <aside className="w-[300px] bg-brand-panel border-l border-brand-border flex flex-col h-full flex-shrink-0">
-      <TabBar
-        tabs={TABS}
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-      />
-      <div className="flex-1 overflow-y-auto p-5">
-        {activeTab === 'edit' && renderEditTab()}
-        {activeTab === 'design' && renderDesignTab()}
-        {activeTab === 'ai' && renderAITab()}
+    <aside style={{
+      width: 300,
+      background: '#fff',
+      borderLeft: '1px solid rgba(0,0,0,0.08)',
+      display: 'flex',
+      flexDirection: 'column',
+      height: '100%',
+      flexShrink: 0,
+      fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    }}>
+
+      {/* ── Tab Bar ── */}
+      <div style={{
+        display: 'flex',
+        borderBottom: '1px solid rgba(0,0,0,0.08)',
+        flexShrink: 0,
+        padding: '6px 8px 0',
+        gap: 2,
+      }}>
+        {TABS.map(({ id, icon: Icon, label }) => {
+          const active = activeTab === id;
+          return (
+            <button
+              key={id}
+              onClick={() => setActiveTab(id)}
+              style={{
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 5,
+                padding: '8px 4px 10px',
+                border: 'none',
+                background: 'transparent',
+                cursor: 'pointer',
+                fontSize: 12,
+                fontWeight: active ? 700 : 500,
+                color: active ? '#6c63ff' : '#94a3b8',
+                borderBottom: active ? '2px solid #6c63ff' : '2px solid transparent',
+                transition: 'all 0.15s',
+                borderRadius: '4px 4px 0 0',
+              }}
+            >
+              <Icon size={13} />
+              {label}
+              {id === 'edit' && selectedBlock && (
+                <span style={{
+                  width: 6, height: 6, borderRadius: '50%',
+                  background: '#6c63ff', marginLeft: 1,
+                }} />
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ── Content ── */}
+      <div style={{
+        flex: 1,
+        overflowY: 'auto',
+        padding: '18px 16px 32px',
+        scrollbarWidth: 'thin',
+        scrollbarColor: 'rgba(0,0,0,0.1) transparent',
+      }}>
+        {activeTab === 'edit' && (
+          <EditTab
+            selectedBlock={selectedBlock}
+            updateBlockContent={updateBlockContent}
+          />
+        )}
+        {activeTab === 'design' && (
+          <DesignTab
+            businessType={businessType}
+            setBusinessType={setBusinessType}
+            fontStyle={fontStyle}
+            setFontStyle={setFontStyle}
+            onAISuggest={handleAISuggest}
+          />
+        )}
+        {activeTab === 'ai' && (
+          <AITab
+            loading={loading}
+            error={error}
+            colorPalette={colorPalette}
+            businessType={businessType}
+            onRetry={handleAISuggest}
+          />
+        )}
       </div>
     </aside>
   );
 }
+
+// ─── Shared Styles ────────────────────────────────────────────
+const s = {
+  label: {
+    fontSize: 11, fontWeight: 700, color: '#64748b',
+    textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 0,
+  },
+  input: {
+    width: '100%', padding: '8px 11px',
+    border: '1px solid rgba(0,0,0,0.12)', borderRadius: 8,
+    fontSize: 13, color: '#1e293b', background: '#fafafa',
+    outline: 'none', transition: 'border-color 0.15s',
+    fontFamily: 'inherit', boxSizing: 'border-box',
+  },
+  emptyState: {
+    display: 'flex', flexDirection: 'column',
+    alignItems: 'center', justifyContent: 'center',
+    padding: '48px 16px', textAlign: 'center', gap: 8,
+  },
+  emptyIcon: { fontSize: 32, marginBottom: 4 },
+  emptyTitle: { fontSize: 13, fontWeight: 700, color: '#1e293b', margin: 0 },
+  emptyDesc: { fontSize: 12, color: '#94a3b8', lineHeight: 1.6, margin: 0, maxWidth: 220 },
+};

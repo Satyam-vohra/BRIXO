@@ -1,27 +1,117 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useDrag } from 'react-dnd';
+import { GripVertical } from 'lucide-react';
 
-export default function BlockCard({ type, label, icon: Icon }) {
-  const [{ isDragging }, dragRef] = useDrag(() => ({
-    type: 'NEW_BLOCK',
-    item: { blockType: type },
-    collect: (monitor) => ({
-      isDragging: !!monitor.isDragging()
-    })
-  }), [type]);
+export default function BlockCard({ type, label, icon: Icon, desc = '' }) {
+  const [hovered, setHovered] = useState(false);
+
+  const [{ isDragging }, dragRef] = useDrag(
+    () => ({
+      type: 'NEW_BLOCK',
+      item: { blockType: type },
+      collect: (monitor) => ({ isDragging: !!monitor.isDragging() }),
+    }),
+    [type]
+  );
 
   return (
     <div
       ref={dragRef}
-      style={{ cursor: 'grab' }}
-      className={`flex items-center gap-3 p-4 rounded-xl bg-slate-800 border border-slate-700 text-white transition-all duration-200 select-none hover:-translate-y-1 hover:shadow-md hover:border-brand-primary/50 active:cursor-grabbing ${
-        isDragging ? 'opacity-40 border-dashed border-brand-primary' : ''
-      }`}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        padding: '9px 10px',
+        borderRadius: 10,
+        border: isDragging
+          ? '1.5px dashed #6c63ff'
+          : hovered
+            ? '1px solid rgba(108,99,255,0.45)'
+            : '1px solid rgba(255,255,255,0.07)',
+        background: isDragging
+          ? 'rgba(108,99,255,0.08)'
+          : hovered
+            ? 'rgba(108,99,255,0.1)'
+            : 'rgba(255,255,255,0.04)',
+        cursor: isDragging ? 'grabbing' : 'grab',
+        userSelect: 'none',
+        opacity: isDragging ? 0.45 : 1,
+        transform: hovered && !isDragging ? 'translateY(-1px)' : 'translateY(0)',
+        transition: 'all 0.14s ease',
+        position: 'relative',
+        overflow: 'hidden',
+      }}
     >
-      <div className="p-2 rounded-lg bg-slate-700 text-brand-primary">
-        <Icon className="w-5 h-5" />
+      {/* Left accent bar on hover */}
+      <div style={{
+        position: 'absolute',
+        left: 0, top: 0, bottom: 0,
+        width: 3,
+        borderRadius: '10px 0 0 10px',
+        background: '#6c63ff',
+        opacity: hovered ? 1 : 0,
+        transition: 'opacity 0.14s',
+      }} />
+
+      {/* Icon box */}
+      <div style={{
+        width: 34,
+        height: 34,
+        borderRadius: 8,
+        background: hovered ? 'rgba(108,99,255,0.22)' : 'rgba(255,255,255,0.07)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0,
+        transition: 'background 0.14s',
+      }}>
+        <Icon
+          size={16}
+          style={{ color: hovered ? '#a78bfa' : 'rgba(255,255,255,0.5)', transition: 'color 0.14s' }}
+        />
       </div>
-      <span className="text-sm font-medium tracking-wide">{label}</span>
+
+      {/* Label + desc */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{
+          margin: 0,
+          fontSize: 12,
+          fontWeight: 600,
+          color: hovered ? '#fff' : 'rgba(255,255,255,0.75)',
+          transition: 'color 0.14s',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+        }}>
+          {label}
+        </p>
+        {desc && (
+          <p style={{
+            margin: 0,
+            fontSize: 10,
+            color: 'rgba(255,255,255,0.28)',
+            marginTop: 1,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}>
+            {desc}
+          </p>
+        )}
+      </div>
+
+      {/* Drag grip — visible on hover */}
+      <GripVertical
+        size={13}
+        style={{
+          color: 'rgba(255,255,255,0.2)',
+          flexShrink: 0,
+          opacity: hovered ? 1 : 0,
+          transition: 'opacity 0.14s',
+        }}
+      />
     </div>
   );
 }
