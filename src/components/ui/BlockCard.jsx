@@ -1,9 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useDrag } from 'react-dnd';
 import { GripVertical } from 'lucide-react';
+import AntiGravity from '../../lib/AntiGravity';
 
 export default function BlockCard({ type, label, icon: Icon, desc = '' }) {
   const [hovered, setHovered] = useState(false);
+  const cardRef = useRef(null);
+  const wiggleRef = useRef(null);
 
   const [{ isDragging }, dragRef] = useDrag(
     () => ({
@@ -14,11 +17,38 @@ export default function BlockCard({ type, label, icon: Icon, desc = '' }) {
     [type]
   );
 
+  // ── 3E: Wobble on hover ──
+  const handleMouseEnter = () => {
+    setHovered(true);
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches || !cardRef.current) return;
+    wiggleRef.current = new AntiGravity(cardRef.current, {
+      mode: 'wobble',
+      intensity: 0.25,
+      frequency: 14,
+      duration: 380,
+      onComplete: () => wiggleRef.current?.destroy(),
+    });
+    wiggleRef.current.play();
+  };
+
+  const handleMouseLeave = () => {
+    setHovered(false);
+    wiggleRef.current?.stop();
+    wiggleRef.current?.destroy();
+    wiggleRef.current = null;
+  };
+
+  // Merge dragRef and cardRef into one callback ref
+  const setRef = (el) => {
+    cardRef.current = el;
+    dragRef(el);
+  };
+
   return (
     <div
-      ref={dragRef}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      ref={setRef}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
       style={{
         display: 'flex',
         alignItems: 'center',

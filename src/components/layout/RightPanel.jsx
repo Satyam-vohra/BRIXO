@@ -1,4 +1,5 @@
 import React, { useContext, useState, useEffect, useRef } from 'react';
+import AntiGravity from '../../lib/AntiGravity';
 import { BuilderContext } from '../../context/BuilderContext';
 import { useAIColorSuggestion } from '../../hooks/useAIColorSuggestion';
 import ColorSwatch from '../ui/ColorSwatch';
@@ -334,6 +335,24 @@ function DesignTab({ businessType, setBusinessType, fontStyle, setFontStyle, onA
 
 // ─── AI Tab ───────────────────────────────────────────────────
 function AITab({ loading, error, colorPalette, businessType, onRetry }) {
+  const paletteRef = useRef(null);
+
+  // ── 3F: Sparkle when AI palette arrives ──
+  useEffect(() => {
+    if (loading || !colorPalette?.primary || !paletteRef.current) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const ag = new AntiGravity(paletteRef.current, {
+      mode: 'sparkle',
+      particleCount: 18,
+      particleColors: [colorPalette.primary, colorPalette.accent, '#ffffff', '#c4b5fd'],
+      gravity: 0.18,
+      duration: 900,
+      onComplete: () => ag.destroy(),
+    });
+    ag.play();
+    return () => ag.destroy();
+  }, [loading]);
+
   if (loading) {
     return (
       <div style={{ ...s.emptyState, gap: 14 }}>
@@ -396,8 +415,8 @@ function AITab({ loading, error, colorPalette, businessType, onRetry }) {
         </div>
       </div>
 
-      {/* Color swatches */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {/* Color swatches — wrapped for sparkle target */}
+      <div ref={paletteRef} style={{ display: 'flex', flexDirection: 'column', gap: 6, position: 'relative' }}>
         {swatches.map(({ key, label }) => (
           colorPalette[key] && (
             <ColorSwatch key={key} color={colorPalette[key]} label={label} />

@@ -1,15 +1,31 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
+import AntiGravity from '../../lib/AntiGravity';
 
 export default function AppHeader({ onPublishClick, onPreviewClick, onDeviceChange, onUndo, onRedo, canUndo = true, canRedo = false, saveStatus = 'saved' }) {
   const [activeDevice, setActiveDevice] = useState('desktop');
   const [publishing, setPublishing] = useState(false);
+  const publishBtnRef = useRef(null);
 
   const handleDeviceChange = (device) => {
     setActiveDevice(device);
     if (onDeviceChange) onDeviceChange(device);
   };
 
+  // ── 3C: Publish button particle burst ──
   const handlePublish = async () => {
+    if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches && publishBtnRef.current) {
+      const ag = new AntiGravity(publishBtnRef.current, {
+        mode: 'explode',
+        particleCount: 28,
+        particleColors: ['#22c55e', '#6c63ff', '#f59e0b', '#ffffff', '#34d399'],
+        gravity: 0.45,
+        spread: 200,
+        duration: 900,
+        onComplete: () => ag.destroy(),
+      });
+      ag.play();
+    }
+
     setPublishing(true);
     if (onPublishClick) await onPublishClick();
     setTimeout(() => setPublishing(false), 2000);
@@ -98,12 +114,14 @@ export default function AppHeader({ onPublishClick, onPreviewClick, onDeviceChan
           🔗 <span style={styles.btnLabel}>Share</span>
         </button>
 
-        {/* Publish */}
+        {/* Publish — ref for AntiGravity burst */}
         <button
+          ref={publishBtnRef}
           onClick={handlePublish}
           disabled={publishing}
           style={{
             ...styles.publishBtn,
+            position: 'relative',
             background: publishing ? '#16a34a' : '#22c55e',
             cursor: publishing ? 'not-allowed' : 'pointer',
           }}
@@ -224,5 +242,6 @@ const styles = {
     transition: 'all 0.15s',
     letterSpacing: -0.1,
     whiteSpace: 'nowrap',
+    overflow: 'visible',
   },
 };

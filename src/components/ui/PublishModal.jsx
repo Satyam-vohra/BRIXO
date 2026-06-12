@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import AntiGravity from '../../lib/AntiGravity';
 import { Check, Copy, Download, X, Globe, FileCode, Sparkles, ExternalLink } from 'lucide-react';
 
 // ─── HTML Generator (unchanged logic, cleaner structure) ──────
@@ -178,6 +179,27 @@ export default function PublishModal({ isOpen, onClose, canvasBlocks, colorPalet
   const [downloading, setDownloading] = useState(false);
   const [downloaded, setDownloaded] = useState(false);
   const [progress, setProgress] = useState(0);
+  const confettiRef = useRef(null);
+
+  // ── 3D: Confetti rain on modal open ──
+  useEffect(() => {
+    if (!isOpen || !confettiRef.current) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const timer = setTimeout(() => {
+      const ag = new AntiGravity(confettiRef.current, {
+        mode: 'confetti',
+        particleCount: 70,
+        particleColors: ['#22c55e', '#6c63ff', '#f59e0b', '#ec4899', '#3b82f6', '#fff'],
+        gravity: 0.28,
+        spread: 360,
+        duration: 2800,
+        origin: { x: 0.5, y: 0.0 },
+        onComplete: () => ag.destroy(),
+      });
+      ag.play();
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [isOpen]);
 
   // Animate progress bar on open
   useEffect(() => {
@@ -254,6 +276,19 @@ export default function PublishModal({ isOpen, onClose, canvasBlocks, colorPalet
         flexDirection: 'column',
         fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
       }}>
+
+        {/* ── 3D: Confetti overlay (MUST be first child, pointerEvents:none) ── */}
+        <div
+          ref={confettiRef}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            pointerEvents: 'none',
+            zIndex: 100,
+            borderRadius: 20,
+            overflow: 'hidden',
+          }}
+        />
 
         {/* Progress bar */}
         <div style={{ height: 3, background: '#f1f5f9' }}>

@@ -1,5 +1,6 @@
-import React, { useContext, useRef, useState } from 'react';
-import { useDrop, useDrag } from 'react-dnd';
+import React, { useContext, useRef, useState, useEffect } from 'react';
+import { useDrag, useDrop } from 'react-dnd';
+import AntiGravity from '../../lib/AntiGravity';
 import { BuilderContext } from '../../context/BuilderContext';
 import {
   Trash2,
@@ -55,8 +56,23 @@ function CanvasBlockWrapper({ block, index, totalBlocks }) {
     duplicateBlock,
   } = useContext(BuilderContext);
 
-  const containerRef = useRef(null);
+  const blockRef = useRef(null);
+  const isFirstMount = useRef(true);
   const isSelected = selectedBlockId === block.id;
+
+  // ── 3A: Bounce animation on first mount (block drop) ──
+  useEffect(() => {
+    if (!isFirstMount.current || !blockRef.current) return;
+    isFirstMount.current = false;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const ag = new AntiGravity(blockRef.current, {
+      gravity: 0.55, bounce: 0.38, friction: 0.88,
+      initialVelocityY: -10, duration: 700,
+      onComplete: () => ag.destroy(),
+    });
+    ag.play();
+    return () => ag.destroy();
+  }, []);
 
   // ── Drag source (sortable reorder) ──
   const [{ isDragging }, dragRef, dragPreview] = useDrag({
@@ -69,12 +85,12 @@ function CanvasBlockWrapper({ block, index, totalBlocks }) {
   const [{ isHoveredOver }, dropRef] = useDrop({
     accept: 'SORTABLE_BLOCK',
     hover(item, monitor) {
-      if (!containerRef.current) return;
+      if (!blockRef.current) return;
       const dragIndex = item.index;
       const hoverIndex = index;
       if (dragIndex === hoverIndex) return;
 
-      const rect = containerRef.current.getBoundingClientRect();
+      const rect = blockRef.current.getBoundingClientRect();
       const midY = (rect.bottom - rect.top) / 2;
       const clientY = monitor.getClientOffset().y - rect.top;
 
@@ -87,14 +103,15 @@ function CanvasBlockWrapper({ block, index, totalBlocks }) {
     collect: (monitor) => ({ isHoveredOver: monitor.isOver() }),
   }, [index, reorderBlocks]);
 
-  dragPreview(dropRef(containerRef));
+  // Connect DnD to the same element as AntiGravity (blockRef)
+  dragPreview(dropRef(blockRef));
 
   const SpecificBlock = BLOCK_COMPONENTS[block.type];
   if (!SpecificBlock) return null;
 
   return (
     <div
-      ref={containerRef}
+      ref={blockRef}
       className="group relative"
       style={{
         opacity: isDragging ? 0.3 : 1,
@@ -211,7 +228,25 @@ function CanvasBlockWrapper({ block, index, totalBlocks }) {
         <ActionIconBtn
           title="Delete block"
           danger
-          onClick={(e) => { e.stopPropagation(); removeBlock(block.id); }}
+          onClick={(e) => {
+            e.stopPropagation();
+            // ── 3B: Disintegrate on delete ──
+            if (
+              window.matchMedia('(prefers-reduced-motion: reduce)').matches ||
+              !blockRef.current
+            ) {
+              removeBlock(block.id);
+              return;
+            }
+            const ag = new AntiGravity(blockRef.current, {
+              mode: 'disintegrate',
+              gravity: 1.4,
+              particleCount: 12,
+              duration: 480,
+              onComplete: () => { ag.destroy(); removeBlock(block.id); },
+            });
+            ag.play();
+          }}
         >
           <Trash2 size={13} />
         </ActionIconBtn>
